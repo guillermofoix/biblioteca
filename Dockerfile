@@ -1,6 +1,9 @@
 # Imagen base: Linux mínimo con Python 3.12 ya instalado.
 FROM python:3.12-slim
 
+# Aplica los parches de seguridad del sistema que la imagen base aún no trae
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
 # PYTHONDONTWRITEBYTECODE=1: Python no crea ficheros .pyc (no hacen falta en un contenedor).
 # PYTHONUNBUFFERED=1: los print y logs salen al momento, así se ven en "docker compose logs".
 ENV PYTHONDONTWRITEBYTECODE=1 \
