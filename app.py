@@ -1,5 +1,6 @@
 """Biblioteca del aula: aplicación web sencilla para gestionar libros."""
 import os
+import json
 import socket
 import sys
 from datetime import date
