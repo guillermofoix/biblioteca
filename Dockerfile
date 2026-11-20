@@ -1,5 +1,5 @@
 # Imagen base: Linux mínimo con Python 3.12 ya instalado.
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 # Aplica los parches de seguridad del sistema que la imagen base aún no trae
 RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
