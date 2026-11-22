@@ -16,6 +16,10 @@ updates:
       interval: weekly
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      # Cambiar de versión de Python se planifica aparte (Dockerfile, ci.yml y pyproject.toml a la vez)
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: github-actions   # las acciones de los workflows
     directory: "/"
