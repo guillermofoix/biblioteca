@@ -64,3 +64,12 @@ jobs:
         run: |
           IMAGEN="${{ steps.variables.outputs.imagen }}:${{ steps.variables.outputs.version }}"
           echo "Imagen publicada: \`$IMAGEN\`" >> "$GITHUB_STEP_SUMMARY"
+
+  desplegar:
+    needs: publicar                  # solo si la imagen se ha publicado
+    uses: ./.github/workflows/deploy.yml
+    permissions:
+      contents: read
+    with:
+      version: ${{ needs.publicar.outputs.version }}
+    secrets: inherit                 # pasa los secrets del environment al otro workflow
