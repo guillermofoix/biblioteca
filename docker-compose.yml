@@ -13,6 +13,7 @@
 # Uso (en la EC2, dentro de esta carpeta):
 #   cp .env.example .env      # y edita .env con tus valores reales
 #   docker compose up -d --build
+name: biblioteca-dev
 services:
 
   app:
@@ -26,7 +27,7 @@ services:
     #   ssh -i labsuser.pem -L 5000:localhost:5000 ubuntu@IP-DE-LA-EC2
     # y visita http://localhost:5000
     ports:
-      - "127.0.0.1:5000:5000"
+      - "127.0.0.1:5001:5000"
     # Estas variables las inyecta Compose al ARRANCAR el contenedor, leyéndolas
     # del fichero .env; NO están dentro de la imagen (así no se filtran secretos).
     # ${VAR:?mensaje} significa "VAR es obligatoria": si falta en .env,
