@@ -52,6 +52,7 @@ def test_lista_sin_base_de_datos_devuelve_503(cliente, monkeypatch):
     respuesta = cliente.get("/")
     assert respuesta.status_code == 503
 
+
 # ---------- La lista, con una base de datos falsa ----------
 
 
@@ -93,3 +94,28 @@ def test_lista_muestra_los_libros(cliente, monkeypatch):
     respuesta = cliente.get("/")
     assert respuesta.status_code == 200
     assert "El Quijote" in respuesta.get_data(as_text=True)
+
+
+# ---------- /health ----------
+
+
+def test_health_con_base_de_datos_devuelve_200(cliente, monkeypatch):
+    monkeypatch.setattr(modulo_app, "conectar", lambda: ConexionFalsa([]))
+    respuesta = cliente.get("/health")
+    assert respuesta.status_code == 200
+    assert respuesta.get_json() == {"status": "ok", "db": "ok"}
+
+
+def test_health_sin_base_de_datos_devuelve_503(cliente, monkeypatch, caplog):
+    monkeypatch.setattr(modulo_app, "DATABASE_URL", "postgresql://u:p@127.0.0.1:1/x")
+    respuesta = cliente.get("/health")
+    assert respuesta.status_code == 503
+    # Responde JSON (no la página de error) y el motivo queda en el log
+    assert respuesta.get_json() == {"status": "error", "db": "unreachable"}
+    assert "Healthcheck fallido" in caplog.text
+
+
+def test_health_sin_database_url_devuelve_503(cliente, monkeypatch):
+    monkeypatch.setattr(modulo_app, "DATABASE_URL", None)
+    respuesta = cliente.get("/health")
+    assert respuesta.status_code == 503

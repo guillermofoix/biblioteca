@@ -136,6 +136,18 @@ def borrar(id):
     flash("Libro borrado.")
     return redirect(url_for("lista"))
 
+@app.route("/health")
+def health():
+    """Para Docker y para el despliegue: ¿la app está viva y llega a la base de datos?"""
+    try:
+        with conectar() as conn:
+            conn.execute("SELECT 1")
+    except (psycopg.Error, RuntimeError) as error:
+        # El detalle solo va al log: en la respuesta podría filtrar datos de la conexión
+        app.logger.error("Healthcheck fallido: %s", error)
+        return {"status": "error", "db": "unreachable"}, 503
+    return {"status": "ok", "db": "ok"}, 200
+
 
 @app.context_processor
 def datos_comunes():
