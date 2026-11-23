@@ -1,0 +1,116 @@
+name: Deploy
+
+on:
+  workflow_call:                     # lo llama release.yml al publicar
+    inputs:
+      version:
+        type: string
+        required: true
+  workflow_dispatch:                 # o tú a mano, desde Actions (también para volver atrás)
+    inputs:
+      version:
+        description: "Versión a desplegar, sin la v (p. ej. 1.3.0)"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  desplegar:
+    runs-on: [self-hosted, produccion]   # en el runner de TU EC2
+    environment: produccion              # pide aprobación y da los secrets
+    concurrency:                         # nunca dos despliegues a la vez
+      group: despliegue-produccion
+      cancel-in-progress: false
+    env:
+      DIR_DESPLIEGUE: /home/ubuntu/despliegue-biblioteca
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Descargar el código de la versión
+        uses: actions/checkout@v7
+        with:
+          ref: v${{ inputs.version }}    # el compose de ESA versión
+
+      - name: Validar la versión
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::La versión '$VERSION' no tiene el formato X.Y.Z (sin la v)"
+            exit 1
+          fi
+
+      - name: Preparar la carpeta de despliegue
+        id: preparar
+        env:
+          REPOSITORIO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$SECRET_KEY" ]; then
+            echo "::error::Faltan los secrets DATABASE_URL o SECRET_KEY en el environment produccion"
+            exit 1
+          fi
+          mkdir -p "$DIR_DESPLIEGUE"
+          # Versión desplegada ahora (para volver a ella si algo falla)
+          ANTERIOR=""
+          if [ -f "$DIR_DESPLIEGUE/.env" ]; then
+            ANTERIOR=$(grep '^VERSION=' "$DIR_DESPLIEGUE/.env" | cut -d= -f2- || true)
+          fi
+          echo "anterior=$ANTERIOR" >> "$GITHUB_OUTPUT"
+          cp despliegue/docker-compose.yml "$DIR_DESPLIEGUE/docker-compose.yml"
+          # .env nuevo con permisos 600, sin mostrar los secretos en el log
+          umask 077
+          rm -f "$DIR_DESPLIEGUE/.env"
+          printf 'IMAGEN=%s\nVERSION=%s\nDATABASE_URL=%s\nSECRET_KEY=%s\n' \
+            "ghcr.io/${REPOSITORIO,,}" "$VERSION" "$DATABASE_URL" "$SECRET_KEY" \
+            > "$DIR_DESPLIEGUE/.env"
+
+      - name: Desplegar
+        id: desplegar
+        run: |
+          cd "$DIR_DESPLIEGUE"
+          docker compose -p biblioteca pull
+          # --wait: espera a que el contenedor esté healthy; si no lo consigue, falla
+          docker compose -p biblioteca up -d --wait --wait-timeout 180
+
+      - name: Volver a la versión anterior (rollback)
+        if: failure() && steps.desplegar.outcome == 'failure'
+        env:
+          VERSION: ${{ inputs.version }}
+          ANTERIOR: ${{ steps.preparar.outputs.anterior }}
+        run: |
+          cd "$DIR_DESPLIEGUE"
+          echo "Logs de la versión $VERSION:"
+          docker compose -p biblioteca logs --tail 50 app || true
+          if [[ ! "$ANTERIOR" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || [ "$ANTERIOR" = "$VERSION" ]; then
+            echo "::error::Ha fallado la versión $VERSION y no hay una anterior a la que volver"
+            exit 1
+          fi
+          sed -i "s/^VERSION=.*/VERSION=$ANTERIOR/" .env
+          if docker compose -p biblioteca up -d --wait --wait-timeout 180; then
+            echo "::error::Ha fallado la versión $VERSION. Se ha vuelto a la $ANTERIOR"
+          else
+            echo "::error::Ha fallado la versión $VERSION y también la vuelta a la $ANTERIOR. Revisa la EC2"
+          fi
+          exit 1                         # en rojo siempre: la versión nueva NO está desplegada
+
+      - name: Limpiar imágenes sin etiqueta
+        run: docker image prune -f
+
+      - name: Resumen
+        env:
+          VERSION: ${{ inputs.version }}
+          ANTERIOR: ${{ steps.preparar.outputs.anterior }}
+        run: |
+          {
+            echo "Versión desplegada: **$VERSION** (anterior: ${ANTERIOR:-ninguna})"
+            echo '```'
+            docker compose -p biblioteca --project-directory "$DIR_DESPLIEGUE" ps
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
