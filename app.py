@@ -49,6 +49,8 @@ def conectar():
                    creado TIMESTAMP DEFAULT now()
                )"""
         )
+        # Migraciones: cambios en la tabla posteriores a su creación (idempotentes)
+        conn.execute("ALTER TABLE libros ADD COLUMN IF NOT EXISTS genero TEXT")
         conn.commit()
         tabla_creada = True
     return conn
@@ -96,11 +98,12 @@ def nuevo():
         titulo = request.form.get("titulo", "").strip()
         autor = request.form.get("autor", "").strip()
         errores, anio = validar(titulo, autor, request.form.get("anio", "").strip())
+        genero = request.form.get("genero", "").strip() or None   # vacío -> NULL
         if not errores:
             with conectar() as conn:
                 conn.execute(
-                    "INSERT INTO libros (titulo, autor, anio) VALUES (%s, %s, %s)",
-                    (titulo, autor, anio),
+                    "INSERT INTO libros (titulo, autor, anio, genero) VALUES (%s, %s, %s, %s)",
+                    (titulo, autor, anio, genero),
                 )
             flash("Libro añadido correctamente.")
             return redirect(url_for("lista"))
@@ -121,10 +124,11 @@ def editar(id):
             autor = request.form.get("autor", "").strip()
             errores, anio = validar(titulo, autor, request.form.get("anio", "").strip())
             prestado = request.form.get("prestado") == "on"
+            genero = request.form.get("genero", "").strip() or None   # vacío -> NULL
             if not errores:
                 conn.execute(
-                    "UPDATE libros SET titulo = %s, autor = %s, anio = %s, prestado = %s WHERE id = %s",
-                    (titulo, autor, anio, prestado, id),
+                    "UPDATE libros SET titulo = %s, autor = %s, anio = %s, prestado = %s, genero = %s WHERE id = %s",
+                    (titulo, autor, anio, prestado, genero, id),
                 )
                 flash("Libro modificado correctamente.")
                 return redirect(url_for("lista"))
