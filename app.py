@@ -51,6 +51,8 @@ def conectar():
         )
         # Migraciones: cambios en la tabla posteriores a su creación (idempotentes)
         conn.execute("ALTER TABLE libros ADD COLUMN IF NOT EXISTS genero TEXT")
+        # Los libros antiguos no tienen género: se marcan antes de exigirlo
+        conn.execute("UPDATE libros SET genero = 'Sin clasificar' WHERE genero IS NULL")   # primero, los datos
         conn.execute("ALTER TABLE libros ALTER COLUMN genero SET NOT NULL")
         conn.commit()
         tabla_creada = True
