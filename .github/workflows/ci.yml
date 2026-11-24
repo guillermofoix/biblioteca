@@ -30,8 +30,42 @@ jobs:
       - name: Ejecutar los tests con pytest
         run: pytest -v
 
+  integracion:
+    runs-on: ubuntu-latest
+    services:
+      postgres:                      # un PostgreSQL de usar y tirar, solo para este job
+        image: postgres:16           # mejor la misma versión mayor que tu RDS
+        env:
+          POSTGRES_USER: biblioteca
+          POSTGRES_PASSWORD: biblioteca   # no es un secreto: esta base de datos desaparece al acabar el job
+          POSTGRES_DB: biblioteca
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U biblioteca"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://biblioteca:biblioteca@localhost:5432/biblioteca
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v7
+
+      - name: Instalar Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Ejecutar los tests con la base de datos real
+        run: pytest -v tests/test_integracion.py
+
   build:
-    needs: tests                     # solo si los tests han pasado
+    needs: [tests, integracion]      # solo si los dos han pasado
     runs-on: ubuntu-latest
     steps:
       - name: Descargar el código
