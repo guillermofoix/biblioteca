@@ -146,7 +146,8 @@ def health():
     """Para Docker y para el despliegue: ¿la app está viva y llega a la base de datos?"""
     try:
         with conectar() as conn:
-            conn.execute("SELECT 1")
+            conn.execute("SELECT 1 FROM comprobaciones_salud")      # antes: SELECT 1  (esa tabla no existe)
+            #conn.execute("SELECT 1")
     except (psycopg.Error, RuntimeError) as error:
         # El detalle solo va al log: en la respuesta podría filtrar datos de la conexión
         app.logger.error("Healthcheck fallido: %s", error)
