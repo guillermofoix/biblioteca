@@ -82,21 +82,23 @@ jobs:
       - name: Volver a la versión anterior (rollback)
         if: failure() && steps.desplegar.outcome == 'failure'
         env:
-          VERSION: ${{ inputs.version }}
+          # OJO: no llamar VERSION a ninguna variable de este paso. Compose da prioridad a las variables
+          # del entorno sobre el .env: con VERSION=<la fallida> aquí, el «up» no cambiaría nada.
+          FALLIDA: ${{ inputs.version }}
           ANTERIOR: ${{ steps.preparar.outputs.anterior }}
         run: |
           cd "$DIR_DESPLIEGUE"
-          echo "Logs de la versión $VERSION:"
+          echo "Logs de la versión $FALLIDA:"
           docker compose -p biblioteca logs --tail 50 app || true
-          if [[ ! "$ANTERIOR" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || [ "$ANTERIOR" = "$VERSION" ]; then
-            echo "::error::Ha fallado la versión $VERSION y no hay una anterior a la que volver"
+          if [[ ! "$ANTERIOR" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || [ "$ANTERIOR" = "$FALLIDA" ]; then
+            echo "::error::Ha fallado la versión $FALLIDA y no hay una anterior a la que volver"
             exit 1
           fi
           sed -i "s/^VERSION=.*/VERSION=$ANTERIOR/" .env
           if docker compose -p biblioteca up -d --wait --wait-timeout 180; then
-            echo "::error::Ha fallado la versión $VERSION. Se ha vuelto a la $ANTERIOR"
+            echo "::error::Ha fallado la versión $FALLIDA. Se ha vuelto a la $ANTERIOR"
           else
-            echo "::error::Ha fallado la versión $VERSION y también la vuelta a la $ANTERIOR. Revisa la EC2"
+            echo "::error::Ha fallado la versión $FALLIDA y también la vuelta a la $ANTERIOR. Revisa la EC2"
           fi
           exit 1                         # en rojo siempre: la versión nueva NO está desplegada
 
