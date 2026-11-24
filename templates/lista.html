@@ -12,7 +12,7 @@
 {% if libros %}
 <table>
     <thead>
-        <tr><th>Título</th><th>Autor</th><th>Año</th><th>Estado</th><th>Acciones</th></tr>
+        <tr><th>Título</th><th>Autor</th><th>Año</th><th>Género</th><th>Estado</th><th>Acciones</th></tr>
     </thead>
     <tbody>
     {% for libro in libros %}
@@ -20,6 +20,7 @@
             <td>{{ libro.titulo }}</td>
             <td>{{ libro.autor }}</td>
             <td>{{ libro.anio or "—" }}</td>
+            <td>{{ libro.genero or "—" }}</td>
             <td>{{ "Prestado" if libro.prestado else "Disponible" }}</td>
             <td class="acciones">
                 <a class="boton" href="{{ url_for('editar', id=libro.id) }}">Editar</a>
