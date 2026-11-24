@@ -71,6 +71,11 @@ def validar(titulo, autor, anio_texto):
             errores.append("El año debe ser un número entero.")
     return errores, anio
 
+@app.context_processor
+def version_de_la_app():
+    """Pasa a todas las plantillas la versión desplegada (la pone el compose de producción)."""
+    return {"version": os.environ.get("APP_VERSION", "desarrollo")}
+
 
 @app.route("/")
 def lista():

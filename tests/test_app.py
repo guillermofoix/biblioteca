@@ -119,3 +119,9 @@ def test_health_sin_database_url_devuelve_503(cliente, monkeypatch):
     monkeypatch.setattr(modulo_app, "DATABASE_URL", None)
     respuesta = cliente.get("/health")
     assert respuesta.status_code == 503
+    
+    
+def test_pie_muestra_la_version(cliente, monkeypatch):
+    monkeypatch.setenv("APP_VERSION", "9.9.9")
+    monkeypatch.setattr(modulo_app, "conectar", lambda: ConexionFalsa([]))
+    assert "9.9.9" in cliente.get("/").get_data(as_text=True)
