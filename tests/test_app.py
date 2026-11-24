@@ -93,3 +93,8 @@ def test_lista_muestra_los_libros(cliente, monkeypatch):
     respuesta = cliente.get("/")
     assert respuesta.status_code == 200
     assert "El Quijote" in respuesta.get_data(as_text=True)
+    
+def test_pie_muestra_la_version(cliente, monkeypatch):
+    monkeypatch.setenv("APP_VERSION", "9.9.9")
+    monkeypatch.setattr(modulo_app, "conectar", lambda: ConexionFalsa([]))
+    assert "9.9.9" in cliente.get("/").get_data(as_text=True)
