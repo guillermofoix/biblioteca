@@ -16,8 +16,8 @@
     <label>Año (opcional)
         <input type="number" name="anio" value="{{ libro.anio or '' }}">
     </label>
-    <label>Género (opcional)
-        <input type="text" name="genero" value="{{ libro.genero or '' }}">
+    <label>Género
+        <input type="text" name="genero" value="{{ libro.genero or '' }}" required>
     </label>
     {% if editando %}
     <label class="casilla">
