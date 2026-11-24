@@ -10,3 +10,13 @@ services:
       DATABASE_URL: ${DATABASE_URL:?Define DATABASE_URL en .env}
       SECRET_KEY: ${SECRET_KEY:?Define SECRET_KEY en .env}
       APP_VERSION: ${VERSION}       # el pie de página muestra la versión desplegada
+    healthcheck:                    # Docker pregunta a /health cada 30 s (la imagen slim no trae curl: usa Python)
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=8)
+      interval: 30s
+      timeout: 10s
+      retries: 3                    # 3 fallos seguidos -> unhealthy
+      start_period: 15s             # margen para que arranque gunicorn
