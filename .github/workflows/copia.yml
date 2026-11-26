@@ -3,7 +3,7 @@ name: Copia de seguridad
 on:
   workflow_dispatch:                 # a mano, desde Actions
   schedule:
-    - cron: "0 15 * * 1-5"           # de lunes a viernes a las 9:30 UTC (10:30 en España en invierno)
+    - cron: "30 9 * * 1-5"           # de lunes a viernes a las 9:30 UTC (10:30 en España en invierno)
 
 permissions:
   contents: read
@@ -19,6 +19,14 @@ jobs:
       AWS_DEFAULT_REGION: us-east-1
       CARPETA: /home/ubuntu/copias
     steps:
+      - name: Comprobar la configuración
+        run: |
+          if [ -z "$BUCKET" ]; then
+            echo "::error::Falta la variable BUCKET_COPIAS (Settings → Secrets and variables → Actions → Variables)"
+            exit 1
+          fi
+          echo "Bucket: $BUCKET"
+
       - name: Volcar la base de datos
         id: volcar
         run: |
@@ -43,5 +51,8 @@ jobs:
           FICHERO: ${{ steps.volcar.outputs.fichero }}
         run: |
           /snap/bin/aws s3 cp "$CARPETA/$FICHERO" "s3://$BUCKET/$FICHERO"
-          rm "$CARPETA/$FICHERO"         # en la EC2 no se guarda: si se pierde la EC2, la copia está en S3
           echo "Copia subida: s3://$BUCKET/$FICHERO" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Borrar la copia de la EC2
+        if: always()                     # también si algo ha fallado: no se deja una copia olvidada en el servidor
+        run: rm -f "$CARPETA"/*.dump     # en la EC2 no se guarda: si se pierde la EC2, la copia está en S3
