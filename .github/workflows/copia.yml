@@ -1,0 +1,47 @@
+name: Copia de seguridad
+
+on:
+  workflow_dispatch:                 # a mano, desde Actions
+  schedule:
+    - cron: "0 15 * * 1-5"           # de lunes a viernes a las 9:30 UTC (10:30 en España en invierno)
+
+permissions:
+  contents: read
+
+jobs:
+  copia:
+    runs-on: [self-hosted, produccion]   # en tu EC2: es la que llega a la RDS
+    defaults:
+      run:
+        shell: bash
+    env:
+      BUCKET: ${{ vars.BUCKET_COPIAS }}  # variable del repositorio (no es secreta)
+      AWS_DEFAULT_REGION: us-east-1
+      CARPETA: /home/ubuntu/copias
+    steps:
+      - name: Volcar la base de datos
+        id: volcar
+        run: |
+          # La URL se lee del .env de producción: no hace falta guardarla en GitHub
+          export DATABASE_URL=$(grep '^DATABASE_URL=' /home/ubuntu/despliegue-biblioteca/.env | cut -d= -f2-)
+          FICHERO="biblioteca-$(date -u +%Y%m%d-%H%M).dump"
+          mkdir -p "$CARPETA"
+          docker run --rm -e DATABASE_URL postgres:18-alpine \
+            sh -c 'pg_dump -Fc "$DATABASE_URL"' > "$CARPETA/$FICHERO"
+          echo "fichero=$FICHERO" >> "$GITHUB_OUTPUT"
+
+      - name: Comprobar que la copia se puede leer
+        env:
+          FICHERO: ${{ steps.volcar.outputs.fichero }}
+        run: |
+          docker run --rm -i postgres:18-alpine pg_restore --list < "$CARPETA/$FICHERO" \
+            | grep 'TABLE DATA public libros'
+          ls -lh "$CARPETA/$FICHERO"
+
+      - name: Subir la copia a S3
+        env:
+          FICHERO: ${{ steps.volcar.outputs.fichero }}
+        run: |
+          /snap/bin/aws s3 cp "$CARPETA/$FICHERO" "s3://$BUCKET/$FICHERO"
+          rm "$CARPETA/$FICHERO"         # en la EC2 no se guarda: si se pierde la EC2, la copia está en S3
+          echo "Copia subida: s3://$BUCKET/$FICHERO" >> "$GITHUB_STEP_SUMMARY"
