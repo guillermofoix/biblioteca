@@ -1,0 +1,91 @@
+name: Restaurar copia
+
+on:
+  workflow_dispatch:                 # solo a mano: nunca se ejecuta sola
+    inputs:
+      copia:
+        description: "Nombre del fichero en S3 (vacío = la copia más reciente)"
+        type: string
+        required: false
+        default: ""
+      confirmar:
+        description: "Escribe RESTAURAR para confirmar"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  restaurar:
+    runs-on: [self-hosted, produccion]   # en tu EC2: es la que llega a la RDS
+    environment: produccion              # pide aprobación y da DATABASE_URL (la de la base de datos de destino)
+    concurrency:
+      group: despliegue-produccion       # nunca a la vez que un despliegue
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: bash
+    env:
+      BUCKET: ${{ vars.BUCKET_COPIAS }}
+      AWS_DEFAULT_REGION: us-east-1
+      CARPETA: /home/ubuntu/restaurar
+    steps:
+      - name: Comprobar la confirmación y la configuración
+        env:
+          CONFIRMAR: ${{ inputs.confirmar }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ "$CONFIRMAR" != "RESTAURAR" ]; then
+            echo "::error::No has escrito RESTAURAR: no se hace nada"
+            exit 1
+          fi
+          if [ -z "$BUCKET" ] || [ -z "$DATABASE_URL" ]; then
+            echo "::error::Falta la variable BUCKET_COPIAS o el secret DATABASE_URL del environment produccion"
+            exit 1
+          fi
+          echo "Destino: ${DATABASE_URL#*@}"      # el host, sin usuario ni contraseña
+
+      - name: Comprobar que la base de datos de destino está vacía
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          TABLAS=$(docker run --rm -e DATABASE_URL postgres:18-alpine \
+            sh -c 'psql "$DATABASE_URL" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema = current_schema()"')
+          echo "Tablas en el destino: $TABLAS"
+          if [ "$TABLAS" != "0" ]; then
+            echo "::error::La base de datos de destino no está vacía. Este workflow no restaura encima de datos existentes"
+            exit 1
+          fi
+
+      - name: Descargar la copia
+        id: descargar
+        env:
+          COPIA: ${{ inputs.copia }}
+        run: |
+          if [ -z "$COPIA" ]; then
+            COPIA=$(/snap/bin/aws s3 ls "s3://$BUCKET/" | awk '{print $4}' | grep '\.dump$' | sort | tail -1)
+          fi
+          if [ -z "$COPIA" ]; then
+            echo "::error::No hay copias en s3://$BUCKET/"
+            exit 1
+          fi
+          mkdir -p "$CARPETA"
+          /snap/bin/aws s3 cp "s3://$BUCKET/$COPIA" "$CARPETA/$COPIA"
+          echo "copia=$COPIA" >> "$GITHUB_OUTPUT"
+
+      - name: Restaurar
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          COPIA: ${{ steps.descargar.outputs.copia }}
+        run: |
+          docker run --rm -i -e DATABASE_URL postgres:18-alpine \
+            sh -c 'pg_restore --no-owner --exit-on-error -d "$DATABASE_URL"' < "$CARPETA/$COPIA"
+          LIBROS=$(docker run --rm -e DATABASE_URL postgres:18-alpine \
+            sh -c 'psql "$DATABASE_URL" -tAc "SELECT count(*) FROM libros"')
+          echo "Restaurada $COPIA: $LIBROS libros" >> "$GITHUB_STEP_SUMMARY"
+          echo "Restaurada $COPIA: $LIBROS libros"
+
+      - name: Borrar la copia de la EC2
+        if: always()
+        run: rm -rf "$CARPETA"
